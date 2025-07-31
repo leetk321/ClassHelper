@@ -1,0 +1,315 @@
+body {
+  font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  background-color: #f4f6f9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 20px;
+  box-sizing: border-box;
+}
+h2 {
+  color: #2c3e50;
+  margin-bottom: 30px;
+}
+.login-box {
+  background-color: #fff;
+  padding: 30px 40px;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  max-width: 500px;
+  box-sizing: border-box;
+}
+.login-box input {
+  width: 100%;
+  padding: 12px 15px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 16px;
+}
+.login-box button {
+  width: 100%;
+  padding: 12px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+.login-box button:hover {
+  background-color: #2980b9;
+}
+.result-box {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 800px;
+  background-color: #fff;
+  padding: 25px 30px;
+  border-radius: 15px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
+}
+.account-section {
+  margin-top: 25px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: space-evenly;
+  align-items: stretch;
+}
+.account-box {
+  width: 300px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin: 0 auto;
+}
+.field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+.field-label {
+  font-weight: bold;
+  color: #34495e;
+  font-size: 17px;
+}
+.field-group {
+  margin-top: 10px;
+}
+.field-group label {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 5px;
+  color: #555;
+}
+.editable-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.editable {
+  padding: 10px;
+  background-color: #fefefe;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  flex: 1;
+}
+.memo-area {
+  min-height: 100px;
+  margin-top: 20px;
+}
+.copy-btn {
+  padding: 6px 10px;
+  font-size: 13px;
+  background-color: #eee;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.copy-btn:hover {
+  background-color: #ddd;
+}
+.save-btn {
+  margin-top: 20px;
+  padding: 8px 14px;
+  background-color: #2ecc71;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.save-btn:hover {
+  background-color: #27ae60;
+}
+.link-button {
+  font-size: 14px;
+  padding: 6px 10px;
+  background-color: #e0e0e0;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #333;
+}
+.link-button:hover {
+  background-color: #ccc;
+}
+
+.header-box {
+  margin-bottom: 15px;
+}
+
+.notice-box {
+  margin-bottom: 25px;
+  padding: 15px;
+  background-color: #fef8e7;
+  border-left: 5px solid #f1c40f;
+  border-radius: 10px;
+  color: #555;
+}
+.back-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  border-radius: 6px;
+  background-color: #95a5a6;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+.back-btn:hover {
+  background-color: #7f8c8d;
+}
+.notice-box.red {
+  border-left-color: #e74c3c;
+  background-color: #fdecea;
+}
+.notice-box.yellow {
+  border-left-color: #f1c40f;
+  background-color: #fff9e6;
+}
+.notice-box.blue {
+  border-left-color: #3498db;
+  background-color: #eaf4fd;
+}
+.notice-box {
+  width: 400px;
+  margin: 10px;
+  padding: 15px;
+  border-radius: 10px;
+  color: #555;
+  flex: 1;
+  box-sizing: border-box;
+}
+.notices-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.memo-box {
+  width: 300px;
+  min-width: 300px;
+}
+.result-box {
+  max-width: 1300px;
+  margin: 0 auto;
+}
+.notice-box p {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+.login-box input[type="text"],
+.login-box input[type="password"],
+.login-box button {
+  width: 280px;
+  display: block;
+  margin: 10px auto;
+  box-sizing: border-box;
+}
+
+/* �߰��� �κ� */
+.editable:empty::before {
+  content: "�Է����ּ���";
+  color: #999;
+  font-style: italic;
+}
+.change-btn.red {
+  margin-top: 20px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.change-btn.red:hover {
+  background-color: #c0392b;
+}
+/* 사이트 비밀번호 변경 버튼 스타일 */
+.change-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  background-color: #8e44ad;
+  color: white;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+}
+.change-btn:hover {
+  background-color: #732d91;
+}
+
+/* 비밀번호 변경 입력창 공통 스타일 */
+.result-box input[type="password"] {
+  width: 100%;
+  padding: 12px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+.editable:empty::before {
+  content: attr(data-placeholder);
+  color: #aaa;
+  font-style: italic;
+}
+
+.copy-container {
+  display: inline-block;
+  position: relative;
+}
+
+.header-btn {
+    margin-top: 10px;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    border-width: initial;
+    border-style: none;
+    border-color: initial;
+    border-image: initial;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+
+.score-section {
+  margin: 20px 10px 5px 10px;
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background-color: #f9f9f9;
+}
+.score-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #333;
+}
+.score-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+.score-item {
+  width: 48%;
+  gap: 30px;
+  display:flex;
+  height: 22px;
+}
+.score-name {
+  font-weight: 500;
+}
+.score-title {
+  color: #666;
+}
+.score-value {
+  color: #666;
+}

@@ -1,0 +1,16 @@
+
+/* 복사 완료 메시지 애니메이션 */
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.copied-msg {
+  animation: fadeInOut 3s ease-in-out forwards;
+}
+
+.editable-wrap {
+  position: relative;
+  overflow: visible;
+}
