@@ -7,7 +7,7 @@
 ---
 
 ### 👨‍💻 사용 언어
-HTML+CSS+JS+Flask / Google Sheets API 활용
+- HTML+CSS+JS+Flask / Google Sheets API 활용
 
 
 ### 💻 구축 시 필요 환경
