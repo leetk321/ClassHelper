@@ -40,5 +40,5 @@
 
 ### 🔗 외부 링크
 
-- 구글 스프레드시트(DB) 양식 : 추가 예정
+- 구글 스프레드시트(DB) 양식 : [링크](https://docs.google.com/spreadsheets/d/14zHWgtie9eSD8jBkaXTQbpvZwc3tFF7ukGF877n0X5Q/edit?usp=sharing) (읽기 전용 / 구축 시 사본 만들어서 사용)
 - 기능 확인을 위한 샘플 사이트 : 추가 예정
