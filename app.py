@@ -38,7 +38,7 @@ def lookup():
                 idname = row[5].strip()
                 password = row[6].strip()
                 if idname == input_id and password == input_pw:
-                    session.permanent = True
+                    session.permanent = False
                     session['user'] = {'idname': input_id, 'password': input_pw}
 
                     h_to_l = [row[j] if j < len(row) else '' for j in range(7, 12)]
