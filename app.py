@@ -7,9 +7,10 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 app.permanent_session_lifetime = timedelta(hours=1)
 
+# 배포시 SPREADSHEET_ID 삭제 (스프레드시트 ID 입력)
 SPREADSHEET_ID = '스프레드시트 ID 입력'
 RANGE = 'A:X'
-NOTICE_RANGE = '공지사항!A:F'
+NOTICE_RANGE = '공지사항!A:H'
 
 creds = service_account.Credentials.from_service_account_file(
     'credentials.json',
@@ -55,10 +56,14 @@ def lookup():
 
                     class_notice = ""
                     invite_code = ""
+                    entry_invite_code = ""
+                    entry_invite_datetime = ""
                     for nrow in notices:
                         if len(nrow) >= 6 and nrow[2].strip() == grade and nrow[3].strip() == clazz:
-                            class_notice = nrow[4]
-                            invite_code = nrow[5]
+                            class_notice = nrow[4] if len(nrow) > 4 else ""
+                            invite_code = nrow[5] if len(nrow) > 5 else ""
+                            entry_invite_code = nrow[6] if len(nrow) > 6 else ""
+                            entry_invite_datetime = nrow[7] if len(nrow) > 7 else ""
                             break
 
                     # 수행 점수 관련 데이터 (score_data)
@@ -92,7 +97,7 @@ def lookup():
 
                     return jsonify({
                         'row': i + 1,
-                        'data': h_to_l + [teacher, teacher_notice, class_notice, personal_msg, grade, clazz, invite_code, row_blocked],
+                        'data': h_to_l + [teacher, teacher_notice, class_notice, personal_msg, grade, clazz, invite_code, row_blocked, entry_invite_code, entry_invite_datetime],
                         'score_data': score_data
                     })
 

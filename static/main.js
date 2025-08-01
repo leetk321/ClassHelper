@@ -26,13 +26,13 @@ async function lookup() {
   resultDiv.innerHTML = "";
 
   try {
-const res = await fetch("/lookup", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ idname, password })
-});
+    const res = await fetch("/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idname, password })
+    });
 
-const data = await res.json();
+    const data = await res.json();
     if (!res.ok) {
       resultDiv.innerHTML = `
       <div class="result-box" style="width: 500px; margin: 20px auto; text-align: center;">
@@ -40,9 +40,9 @@ const data = await res.json();
       </div>`;
       return;
     }
-    
-const scoreData = data.score_data || [];
-    
+
+    const scoreData = data.score_data || [];
+
     if (!res.ok) {
       resultDiv.innerHTML = `
       <div class="result-box" style="width: 500px; margin: 20px auto; text-align: center;">
@@ -52,23 +52,23 @@ const scoreData = data.score_data || [];
     }
 
     loginBox.style.display = "none";
-    document.querySelector('.title').innerText = '🖥️ ㅇㅇ중 정보 수업 도우미';
+    document.querySelector('.title').innerText = '🖥️ ㅇㅇ중 정보 수업 도우미'; //배포시 학교명 삭제
     const rowNum = data.row;
 
-    if (inputPassword === "12345678") {
+    if (inputPassword === "기본 비밀번호 입력") {  //배포시 기본 비밀번호 삭제
       alert("기본 비밀번호입니다. 보안을 위해 변경해주세요.");
       showPasswordChange(rowNum);
       return;
     }
 
     const [entryId, entryPw, googleId, googlePw, memo,
-           teacherName, teacherNotice, classNotice, personalMsg,
-           grade, clazz, inviteCode, rowBlocked] = data.data;
-const safeEntryId = entryId;
-const safeEntryPw = entryPw;
-const safeGoogleId = googleId;
-const safeGooglePw = googlePw;
-const safeMemo = memo;
+      teacherName, teacherNotice, classNotice, personalMsg,
+      grade, clazz, inviteCode, rowBlocked, entryInviteCode, entryInviteDatetime] = data.data;
+    const safeEntryId = entryId;
+    const safeEntryPw = entryPw;
+    const safeGoogleId = googleId;
+    const safeGooglePw = googlePw;
+    const safeMemo = memo;
 
 
     resultDiv.innerHTML = `
@@ -118,7 +118,14 @@ ${rowBlocked.trim() === "" && scoreData.length > 0 ? `
           <div class="account-box">
             <div class="field-header">
               <span class="field-label">엔트리</span>
-              <a href="https://playentry.org" target="_blank" class="link-button">엔트리 바로가기</a>
+
+<div class="entry-btn-group">
+  ${rowBlocked.trim() === "" ? `
+    <button class="copy-btn" id="entryInviteCodeBtn">초대코드</button>
+  ` : ""}
+  
+  <a href="https://playentry.org" target="_blank" class="link-button">엔트리 바로가기</a>
+</div>
             </div>
             <div class="field-group">
               <label>ID</label>
@@ -144,10 +151,13 @@ ${rowBlocked.trim() === "" && scoreData.length > 0 ? `
             <div class="field-header">
               <span class="field-label">Google</span>
 
-${rowBlocked.trim() === "" ? `
-  <button class="copy-btn" id="inviteCodeBtn">초대코드</button>
-` : ""}          
-              <a href="https://classroom.google.com/" target="_blank" class="link-button">클래스룸 바로가기</a>
+<div class="google-btn-group">
+  ${rowBlocked.trim() === "" ? `
+    <button class="copy-btn" id="inviteCodeBtn">초대코드</button>
+  ` : ""}
+
+  <a href="https://classroom.google.com/" target="_blank" class="link-button">클래스룸 바로가기</a>
+</div>
             </div>
             <div class="field-group">
               <label>ID (변경 불가)</label>
@@ -181,20 +191,59 @@ ${rowBlocked.trim() === "" ? `
       </div>
     `;
 
-// 초대코드 복사 버튼 이벤트
-if (rowBlocked.trim() === "") {
-  const inviteBtn = document.getElementById("inviteCodeBtn");
-  if (inviteBtn) {
-    inviteBtn.addEventListener('click', () => {
-      if (inviteCode) {
-        copyToClipboard(inviteCode, inviteBtn, true);
-      } else {
-        alert("초대코드를 확인할 수 없습니다.");
+    // 초대코드 복사 버튼 이벤트
+    if (rowBlocked.trim() === "") {
+      const inviteBtn = document.getElementById("inviteCodeBtn");
+      if (inviteBtn) {
+        inviteBtn.addEventListener('click', () => {
+          if (inviteCode) {
+            copyToClipboard(inviteCode, inviteBtn, true);
+          } else {
+            alert("초대코드를 확인할 수 없습니다.");
+          }
+        });
       }
-    });
-  }
-}
 
+      const entryInviteBtn = document.getElementById("entryInviteCodeBtn");
+      if (entryInviteBtn) {
+        entryInviteBtn.addEventListener('click', () => {
+          if (!entryInviteCode) {
+            alert("초대코드를 확인할 수 없습니다.");
+            return;
+          }
+
+          // ✅ 초대코드 일시 유효성 확인
+          if (entryInviteDatetime) {
+            try {
+              // 오전/오후 → AM/PM 으로 변환
+              const dateStr = entryInviteDatetime
+                .replace("오전", "AM")
+                .replace("오후", "PM")
+                .replace(/\./g, "-")   // Date가 yyyy-mm-dd 형태로 파싱 잘 됨
+                .replace(/\s+/g, " ")  // 공백 정리
+                .trim();
+
+              const parsedDate = new Date(dateStr);
+              const now = new Date();
+
+              if (isNaN(parsedDate.getTime())) {
+                console.warn("초대코드 발급일 파싱 실패:", entryInviteDatetime);
+              } else {
+                const diffDays = (now - parsedDate) / (1000 * 60 * 60 * 24);
+                if (diffDays > 7) {
+                  alert("초대코드가 만료되었습니다.\n선생님께 초대코드 재발급을 요청하세요.");
+                  return;
+                }
+              }
+            } catch (err) {
+              console.error("날짜 파싱 중 오류:", err);
+            }
+          }
+
+          copyToClipboard(entryInviteCode, entryInviteBtn, true);
+        });
+      }
+    }
   } catch (e) {
     console.error(e);
   }
@@ -297,18 +346,18 @@ function showPasswordChange(rowNum) {
 async function changePassword(row) {
   const newPw = document.getElementById("newPw").value.trim();
   const confirmPw = document.getElementById("confirmPw").value.trim();
-if (newPw.length < 4) return alert("비밀번호는 4자리 이상이어야 합니다.");
-if (newPw !== confirmPw) return alert("비밀번호가 일치하지 않습니다.");
-if (/^(\d)\1+$/.test(newPw)) return alert("같은 숫자를 반복한 비밀번호는 사용할 수 없습니다.");
-if (/^\d+$/.test(newPw) && (() => {
-  let asc = true, desc = true;
-  for (let i = 1; i < newPw.length; i++) {
-    const diff = newPw.charCodeAt(i) - newPw.charCodeAt(i - 1);
-    if (diff !== 1) asc = false;
-    if (diff !== -1) desc = false;
-  }
-  return asc || desc;
-})()) return alert("연속된 숫자는 비밀번호로 사용할 수 없습니다.");
+  if (newPw.length < 4) return alert("비밀번호는 4자리 이상이어야 합니다.");
+  if (newPw !== confirmPw) return alert("비밀번호가 일치하지 않습니다.");
+  if (/^(\d)\1+$/.test(newPw)) return alert("같은 숫자를 반복한 비밀번호는 사용할 수 없습니다.");
+  if (/^\d+$/.test(newPw) && (() => {
+    let asc = true, desc = true;
+    for (let i = 1; i < newPw.length; i++) {
+      const diff = newPw.charCodeAt(i) - newPw.charCodeAt(i - 1);
+      if (diff !== 1) asc = false;
+      if (diff !== -1) desc = false;
+    }
+    return asc || desc;
+  })()) return alert("연속된 숫자는 비밀번호로 사용할 수 없습니다.");
   try {
     const res = await fetch("/update_password", {
       method: "POST",

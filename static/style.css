@@ -129,12 +129,13 @@ h2 {
   background-color: #27ae60;
 }
 .link-button {
-  font-size: 14px;
+  font-size: 13px;
   padding: 6px 10px;
-  background-color: #e0e0e0;
+  background-color: #eee;
   border-radius: 6px;
   text-decoration: none;
   color: #333;
+  border: 1px solid #bbb;
 }
 .link-button:hover {
   background-color: #ccc;
@@ -312,4 +313,10 @@ h2 {
 }
 .score-value {
   color: #666;
+}
+.google-btn-group,
+.entry-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
