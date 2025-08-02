@@ -1,13 +1,21 @@
 from flask import Flask, render_template, request, jsonify, session
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from werkzeug.utils import secure_filename
+from flask import send_file
+from werkzeug.utils import safe_join
+import os
 from datetime import timedelta
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 app.permanent_session_lifetime = timedelta(hours=1)
 
-# 배포시 SPREADSHEET_ID 삭제 (스프레드시트 ID 입력)
+UPLOAD_FOLDER = 'file'
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 배포시 SPREADSHEET_ID 삭제
 SPREADSHEET_ID = '스프레드시트 ID 입력'
 RANGE = 'A:X'
 NOTICE_RANGE = '공지사항!A:H'
@@ -108,11 +116,21 @@ def lookup():
         print("🔥 예외 발생:", traceback.format_exc())  # 서버 로그에 출력
         return jsonify({'error': '서버 내부 오류 발생', 'detail': str(e)}), 500
 
+@app.route('/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json(force=True)
+        ...
+    except Exception as e:
+        print('예외 발생:', e)
+        return jsonify({'error': '서버 내부 오류'}), 500
+
 @app.route('/session_check', methods=['GET'])
 def session_check():
     if 'user' in session:
         return jsonify(session['user'])
     return jsonify({'error': 'no session'}), 401
+
 
 @app.route('/logout', methods=['POST'])
 def logout():
@@ -190,6 +208,112 @@ def update_password():
         return jsonify({'status': 'password updated'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'user' not in session:
+        return jsonify({'error': '인증되지 않음'}), 401
+
+    file = request.files.get('file')
+    row_number = request.form.get('row')
+
+    if not file or file.filename == '':
+        return jsonify({'error': '파일이 선택되지 않았습니다'}), 400
+
+    # ✅ S열(인덱스 18)에서 관리자 여부 확인
+    values = sheet.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range=f"S{row_number}"
+    ).execute().get('values', [])
+    if not values or not values[0] or values[0][0].strip() != '관리자':
+        return jsonify({'error': '파일 업로드 권한 없음'}), 403
+
+    # ✅ 전체 시트에서 해당 행 가져오기
+    all_rows = sheet.values().get(
+        spreadsheetId=SPREADSHEET_ID,
+        range='A:Z'
+    ).execute().get('values', [])
+    row_index = int(row_number) - 1
+
+    if len(all_rows) <= row_index:
+        return jsonify({'error': '행 번호가 유효하지 않습니다'}), 400
+
+    row_data = all_rows[row_index]
+
+    # ✅ N열(13번 인덱스)에 교사명이 정확히 입력되어 있는지 확인
+    if len(row_data) <= 13 or not row_data[13].strip():
+        return jsonify({'error': '교사명을 확인할 수 없습니다'}), 400
+
+    teacher_name = row_data[13].strip()
+
+    # 금지된 확장자
+    DISALLOWED_EXTENSIONS = {'.exe', '.bat', '.sh', '.php', '.py', '.js', '.html', '.htm', '.dll', '.msi'}
+
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    if file_ext in DISALLOWED_EXTENSIONS:
+        return jsonify({'error': f'이 확장자({file_ext})의 파일은 업로드할 수 없습니다.'}), 400
+
+    # ✅ 교사명, 파일명으로 구성된 안전한 파일명 생성
+    filename = f"{teacher_name}_{file.filename}"
+    save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    file.save(save_path)
+
+    return jsonify({'status': 'uploaded', 'filename': filename})
+
+@app.route('/file/<path:filename>')
+def uploaded_file(filename):
+    if 'user' not in session:
+        return jsonify({'error': '접근 권한 없음'}), 401
+    try:
+        full_path = safe_join(app.config['UPLOAD_FOLDER'], filename)
+        if not full_path or not os.path.isfile(full_path):
+            return jsonify({'error': '파일이 존재하지 않음'}), 404
+        return send_file(full_path, as_attachment=True)
+    except Exception as e:
+        print(f"🔥 다운로드 실패: {e}")
+        return jsonify({'error': '서버 내부 오류'}), 500
+    
+@app.route('/delete_file', methods=['POST'])
+def delete_file():
+    data = request.get_json()
+    filename = data.get('filename')
+
+    if not filename:
+        return jsonify({'error': '파일명이 제공되지 않았습니다.'}), 400
+
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            return jsonify({'success': 'deleted'})
+        except Exception as e:
+            return jsonify({'error': f'삭제 중 오류 발생: {str(e)}'}), 500
+    else:
+        return jsonify({'error': '파일이 존재하지 않습니다.'}), 404
+
+@app.route('/file_list')
+def file_list():
+    if 'user' not in session:
+        return jsonify([])
+
+    user_id = session['user']['idname']
+    values = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range='A:X').execute().get('values', [])
+    teacher_name = ''
+    for row in values:
+        if len(row) >= 6 and row[5].strip() == user_id:
+            teacher_name = row[13] if len(row) > 13 else ''
+            break
+
+    if not teacher_name:
+        return jsonify([])
+
+    try:
+        files = os.listdir(app.config['UPLOAD_FOLDER'])
+        matching_files = [f for f in files if f.startswith(f"{teacher_name}_")]
+        return jsonify(matching_files)
+    except:
+        return jsonify([])
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)

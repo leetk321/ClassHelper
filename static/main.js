@@ -1,16 +1,20 @@
-
 window.addEventListener("DOMContentLoaded", () => {
-  if (localStorage.getItem("forceLogout") === "true") {
-    localStorage.removeItem("forceLogout");
-    return;
-  }
+  const idInput = document.getElementById("idname");
+  const pwInput = document.getElementById("password");
+
+  const forceLogout = localStorage.getItem("forceLogout") === "true";
+  localStorage.removeItem("forceLogout"); // 플래그는 항상 제거
+
   fetch('/session_check')
     .then(res => res.ok ? res.json() : null)
     .then(data => {
       if (data) {
-        document.getElementById("idname").value = data.idname;
-        document.getElementById("password").value = data.password;
-        lookup(); // 자동 로그인
+        idInput.value = data.idname;
+        if (!forceLogout) {
+          pwInput.value = data.password;
+        } else {
+          pwInput.value = "";  // 비밀번호는 비움
+        }
       }
     });
 });
@@ -33,13 +37,6 @@ async function lookup() {
     });
 
     const data = await res.json();
-    if (!res.ok) {
-      resultDiv.innerHTML = `
-      <div class="result-box" style="width: 500px; margin: 20px auto; text-align: center;">
-        <p style="color:red;">${data.error}</p>
-      </div>`;
-      return;
-    }
 
     const scoreData = data.score_data || [];
 
@@ -64,6 +61,11 @@ async function lookup() {
     const [entryId, entryPw, googleId, googlePw, memo,
       teacherName, teacherNotice, classNotice, personalMsg,
       grade, clazz, inviteCode, rowBlocked, entryInviteCode, entryInviteDatetime] = data.data;
+    const isAdmin = rowBlocked.trim() === "관리자";
+
+    // 최초 다운로드 목록 로딩
+    loadDownloadList();
+
     const safeEntryId = entryId;
     const safeEntryPw = entryPw;
     const safeGoogleId = googleId;
@@ -76,11 +78,16 @@ async function lookup() {
       <button class="header-btn back-btn" onclick="logout()">로그아웃</button>
       <button class="header-btn change-btn" onclick="showPasswordChange(${rowNum})">사이트 비밀번호 변경</button>
       </div>
+      <!-- ✅ 업로드 영역 추가 -->
+        <div id="uploadArea"></div>
       <div class="result-box">
-        <p style="text-align:left; margin-bottom:10px;">
-          ☺️ ${grade}학년 ${clazz}반 ${idname.replace(/^\d+\s*/, '')}님 환영합니다.
-        </p>
-${rowBlocked.trim() === "" ? `
+<p style="text-align:left; margin-bottom:10px;">
+  ☺️ ${isAdmin
+        ? `${idname.replace(/^\d+\s*/, '')} 선생님`
+        : `${grade}학년 ${clazz}반 ${idname.replace(/^\d+\s*/, '')}님`
+      } 환영합니다.
+</p>
+${rowBlocked.trim() !== "v" ? `
   <div class="notices-row">
     <div class="notice-box red">
       <strong>📢 ${teacherName ? teacherName + " 선생님" : "선생님"} 공지사항</strong>
@@ -183,13 +190,14 @@ ${rowBlocked.trim() === "" && scoreData.length > 0 ? `
             <div id="memoCell" class="editable memo-area" contenteditable="true" data-placeholder="메모를 입력하세요">${safeMemo}</div>
             <button class="save-btn" onclick="saveMemo(${rowNum})">메모 저장</button>
           </div>
+          <div id="downloadArea"></div>
         </div>
         <p style="margin-top:30px; font-size:13px; color:#555; text-align:center">
-          ※ 아이디나 비밀번호를 변경한 경우, 변경 버튼을 눌러 계정 정보를 기록해주세요.<br/><br/>
-          사이트 제작 : 2025.07.30. 이태근 // 본 사이트의 목적 외 사용을 금합니다.
+          ※ 아이디나 비밀번호를 변경한 경우, 변경 버튼을 눌러 계정 정보를 기록해주세요.<br/>
         </p>
       </div>
-    `;
+    </div>
+  `;
 
     // 초대코드 복사 버튼 이벤트
     if (rowBlocked.trim() === "") {
@@ -244,6 +252,30 @@ ${rowBlocked.trim() === "" && scoreData.length > 0 ? `
         });
       }
     }
+
+    loadDownloadList();
+    // 업로드 영역 (관리자만 표시)
+    if (isAdmin) {
+      const uploadArea = document.getElementById('uploadArea');
+      const ltDiv = document.getElementById('lookupResult')
+      uploadArea.innerHTML = `
+<div class="upload-top-right">
+  <div class="upload-header">
+    <div class="field-label">📎 파일 업로드</div>
+    <button class="upload-btn" type="button" onclick="uploadFile(${rowNum})">업로드</button>
+  </div>
+  <div id="fileDropZone" class="drop-zone">
+    <span>이 곳에 파일을 끌어놓거나 클릭하세요</span>
+    <input type="file" id="uploadFileInput" class="file-input" />
+  </div>
+</div>
+`;
+      setupDropZone(rowNum);
+      document.getElementById('result').appendChild(uploadArea);
+
+    }
+    window.isAdmin = isAdmin;
+
   } catch (e) {
     console.error(e);
   }
@@ -294,33 +326,18 @@ function copyToClipboard(text, buttonElement, above = false) {
       copiedSpan.innerText = "복사 완료!";
       copiedSpan.classList.add("copied-msg");
 
-      if (above) {
-        // 버튼 기준으로 정확히 위 5px에 배치
-        copiedSpan.style.position = "absolute";
-        copiedSpan.style.left = "50%";
-        copiedSpan.style.bottom = "100%";
-        copiedSpan.style.transform = "translate(-50%, -5px)";
-        copiedSpan.style.fontSize = "13px";
-        copiedSpan.style.color = "red";
-        copiedSpan.style.whiteSpace = "nowrap";
+      // 버튼 기준으로 정확히 위 5px에 배치
+      copiedSpan.style.position = "absolute";
+      copiedSpan.style.left = "50%";
+      copiedSpan.style.bottom = "100%";
+      copiedSpan.style.transform = "translate(-50%, -5px)";
+      copiedSpan.style.fontSize = "13px";
+      copiedSpan.style.color = "red";
+      copiedSpan.style.whiteSpace = "nowrap";
 
-        // 🔹 버튼 자신에게 relative 설정
-        buttonElement.style.position = "relative";
-        buttonElement.appendChild(copiedSpan);
-      } else {
-        // 기본 오른쪽 표시
-        copiedSpan.style.color = "red";
-        copiedSpan.style.marginLeft = "8px";
-        copiedSpan.style.position = "absolute";
-        copiedSpan.style.top = "50%";
-        copiedSpan.style.left = "100%";
-        copiedSpan.style.transform = "translate(5px, -50%)";
-        copiedSpan.style.fontSize = "13px";
-        copiedSpan.style.whiteSpace = "nowrap";
-        buttonElement.parentElement.style.position = "relative";
-        buttonElement.parentElement.appendChild(copiedSpan);
-      }
-
+      // 🔹 버튼 자신에게 relative 설정
+      buttonElement.style.position = "relative";
+      buttonElement.appendChild(copiedSpan);
       setTimeout(() => copiedSpan.remove(), 3000);
     }).catch(err => {
       console.error("복사 실패:", err);
@@ -375,3 +392,198 @@ async function changePassword(row) {
     alert("변경 실패");
   }
 }
+
+function bindHoverEffectOnDeleteButtons() {
+  document.querySelectorAll('.download-item .delete-btn').forEach(btn => {
+    const item = btn.closest('.download-item');
+    btn.addEventListener('mouseenter', () => {
+      item.classList.add('hovered');
+    });
+    btn.addEventListener('mouseleave', () => {
+      item.classList.remove('hovered');
+    });
+  });
+}
+
+// 다운로드 영역 표시 함수
+function loadDownloadList() {
+  fetch('/file_list')
+    .then(res => res.json())
+    .then(fileList => {
+      const downloadArea = document.getElementById('downloadArea');
+      const files = Array.isArray(fileList) ? fileList : [];
+
+      downloadArea.innerHTML = `
+<div>
+  <div class="field-label download-box"style="margin-bottom: 20px;">📁 파일 다운로드 (<span id="fileCount">${files.length}</span>)</div>
+  ${files.length > 0
+          ? `
+    <ul class="download-list">
+      ${files.map(f => {
+            const filenameOnly = f.split('_').slice(1).join('_');
+            return `
+          <li class="download-item">
+            <a href="/file/${f}" target="_blank">${filenameOnly}</a>
+            ${isAdmin ? `<button class="delete-btn" data-filename="${f}">🗑️</button>` : ""}
+          </li>
+        `;
+          }).join('')}
+    </ul>
+    `
+          : `<p style="padding: 10px; color: #888;">등록된 파일이 없습니다.</p>`
+        }
+</div>
+      `;
+
+      bindDeleteButtons(); // ✅ 삭제 버튼 연결
+      bindHoverEffectOnDeleteButtons(); // ✅ hover 효과 연결
+    })
+    .catch(err => {
+      console.error("파일 목록 로딩 실패:", err);
+      const downloadArea = document.getElementById('downloadArea');
+      downloadArea.innerHTML = `<div class="upload-box"><p style="color:red;">파일 목록을 불러오지 못했습니다.</p></div>`;
+    });
+}
+
+async function uploadFile(row) {
+  const fileInput = document.getElementById('uploadFileInput');
+  const file = fileInput.files[0];
+  if (!file) return alert('업로드할 파일을 선택하세요.');
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('row', row);
+
+  try {
+    const res = await fetch('/upload', {
+      method: 'POST',
+      body: formData
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error);
+
+    alert('업로드 성공!');
+
+    // ✅ 다운로드 목록 새로고침
+    loadDownloadList();
+
+    // ✅ 업로드 후 상태 초기화
+    fileInput.value = "";
+
+    // ⬇️ span 재선언
+    const dropZone = document.getElementById('fileDropZone');
+    if (dropZone) {
+      const span = dropZone.querySelector('span');
+      if (span) {
+        span.textContent = "이 곳에 파일을 끌어놓거나 클릭하세요";
+      }
+    }
+
+  } catch (e) {
+    alert('업로드 실패: ' + e.message);
+  }
+}
+
+function setupDropZone(rowNum) {
+  const dropZone = document.getElementById("fileDropZone");
+  const fileInput = document.getElementById("uploadFileInput");
+  const span = dropZone.querySelector("span");
+
+  if (!dropZone || !fileInput || !span) return;
+
+  dropZone.addEventListener("click", (e) => {
+    if (e.target !== fileInput) {
+      fileInput.click();
+    }
+  });
+
+  function updateFileInfoDisplay(file) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+    span.textContent = `${file.name} (${sizeMB}MB)`;
+  }
+
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      updateFileInfoDisplay(fileInput.files[0]);
+      // 업로드는 버튼으로만 실행되므로 여기선 호출 안 함
+    } else {
+      span.textContent = "이 곳에 파일을 끌어놓거나 클릭하세요";
+    }
+  });
+
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const dt = new DataTransfer();
+      dt.items.add(files[0]); // 첫 파일만 등록
+      fileInput.files = dt.files;
+
+      updateFileInfoDisplay(files[0]);
+    }
+  });
+}
+
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.onclick = async () => {
+    const filename = btn.dataset.filename;
+    if (confirm(`${filename}\n삭제하시겠습니까?`)) {
+      const res = await fetch('/delete_file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+      });
+      const result = await res.json();
+      if (result.status === 'deleted') {
+        // 다시 목록 불러오거나 새로고침
+        loadDownloadList(); // 또는 location.reload();
+      } else {
+        alert(result.error || '삭제 실패');
+      }
+    }
+  };
+});
+
+function bindDeleteButtons() {
+  document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.onclick = async function () {
+      const filename = this.dataset.filename;
+      if (confirm(`${filename}\n삭제하시겠습니까?`)) {
+        const res = await fetch('/delete_file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename })
+        });
+        const result = await res.json();
+        if (result.success) {
+          loadDownloadList();
+        } else {
+          alert(result.error || '삭제 실패');
+        }
+      }
+    };
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.download-item button').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      btn.closest('.download-item')?.classList.add('hovered');
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.closest('.download-item')?.classList.remove('hovered');
+    });
+  });
+});
