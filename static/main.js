@@ -78,7 +78,7 @@ function generateMainHTML(data, scoreData, idname, grade, clazz, rowNum, isAdmin
 
   return `
     <div class="top-box">
-      <div class="title-box"><h2>📚 ㅇㅇ중 정보 수업 도우미</h2></div> <!-- 배포시 학교명 삭제 -->
+      <div class="title-box"><h2 style="cursor:pointer;" onclick="location.reload();">📚 ㅇㅇ중 정보 수업 도우미</h2></div> <!-- 배포시 학교명 삭제 -->
       <div id="uploadArea"></div>
     </div>
     <div class="result-box">
