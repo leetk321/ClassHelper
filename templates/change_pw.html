@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ㅇㅇ중 정보 :: 비밀번호 변경</title> <!--배포시 학교명 삭제-->
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/fade_effect.css">
+</head>
+
+<body>
+  <h2>🔐 비밀번호 변경</h2>
+
+  <div class="login-box">
+    <label for="current-password">현재 비밀번호</label>
+    <input type="password" id="current-password" placeholder="현재 비밀번호를 입력하세요">
+
+    <label for="new-password">새 비밀번호</label>
+    <input type="password" id="new-password" placeholder="새 비밀번호를 입력하세요 (4자리 이상)">
+
+    <label for="confirm-password">새 비밀번호 확인</label>
+    <input type="password" id="confirm-password" placeholder="새 비밀번호를 다시 입력하세요" style="margin-bottom:25px;">
+
+    <button onclick="changePassword()">비밀번호 변경</button>
+    <button onclick="goBack()" class="back-btn">이전 화면으로 돌아가기</button>
+  </div>
+
+  <div id="result"></div>
+  <a href="https://github.com/leetk321/ClassHelper" target="_blank"
+    style="display: block; text-align: center; color: gray; font-size: 11px; margin-top: 15px; text-decoration: none;">사이트
+    제작 : 이태근</a> <!--배포시 링크 및 주소 삭제-->
+  <a href="관리자 페이지 링크"
+    target="_blank"
+    style="display: block; text-align: center; color: gray; font-size: 11px; margin-top: 10px; text-decoration: none;">사이트 주소</a>
+  <script src="/static/change_pw.js"></script>
+</body>
+
+</html>
