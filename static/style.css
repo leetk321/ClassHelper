@@ -514,8 +514,8 @@ div#downloadArea {
     padding: 16px;
     border-radius: 10px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    height: 114px;
-    float:right;
+    height:150px;
+    box-sizing: border-box;
 }
 
 /* ③ 한 행에 정렬 */
@@ -534,12 +534,6 @@ div#downloadArea {
   padding-left:10px;     /* 필요에 따라 값 조정 */
   font-size:22px;
   font-weight:700;
-}
-
-/* ⑤ 업로드 박스가 줄을 차지해도 float 해제 */
-.upload-top-right{
-  float:none;            /* 기존 float:right 제거 */
-  width:280px;
 }
 
 .drop-zone {
@@ -706,12 +700,20 @@ div#downloadArea {
     /* 3) 업로드 박스(=uploadArea) 가운데 배치 */
     .upload-top-right{        /* 또는 #uploadArea, 실제 클래스/ID에 맞춰 변경 */
         width: 100%;
-        max-width: 320px;     /* 적당히 줄폭 제한 */
         margin: 0 auto;       /* 좌우 자동 → 수평 중앙 */
         float: none;          /* 혹시 남아 있는 float 제거 */
     }
+    .top-box{
+        display:block;
+
+    }
 }
 
+@media (max-width: 700px) {
+    .header-box{
+        display:block;
+    }
+}
 /* 480px 이하 */
 @media (max-width: 480px) {
     body {
@@ -726,7 +728,6 @@ div#downloadArea {
     
     .result-box {
         padding: 15px;
-        margin: 0 5px;
     }
     
     .account-section {
@@ -762,7 +763,7 @@ div#downloadArea {
     }
     
     /* 2. 초대코드 버튼 크기 원래대로 유지 */
-    .copy-btn {
+    .copy-btn . {
         width: auto;
         align-self: flex-start;
         white-space: nowrap;
@@ -778,19 +779,12 @@ div#downloadArea {
         padding: 10px;
         white-space: normal;
     }
-   
-    .upload-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-    }
     
     /* 엔트리, 구글 버튼 그룹을 세로로 배치하되 버튼 크기는 유지 */
     .google-btn-group,
     .entry-btn-group {
         flex-direction: column;
         gap: 8px;
-        width: 100%;
         align-items: stretch;
     }
     
@@ -833,15 +827,7 @@ div#downloadArea {
         max-width: 100%;
         min-width: auto;
     }
-    
-    .upload-top-right {
-        position: relative;
-        top: 0;
-        right: 0;
-        width: 100%;
-        margin-bottom: 20px;
-    }
-    
+
     .card-box.fade-in {
         width: 100%;
         height: auto;
@@ -852,7 +838,13 @@ div#downloadArea {
         font-size: 15px;
     }
     
-    .score-title {
+    .score-title{
+        font-size: 14px;
+    }
+    .score-name{
+        font-size: 14px;
+    }
+    .score-value{
         font-size: 14px;
     }
 }
@@ -867,7 +859,6 @@ div#downloadArea {
     .login-box,
     .result-box {
         padding: 12px 15px;
-        margin: 0 2px;
     }
     
     .account-box,
@@ -991,13 +982,17 @@ div#downloadArea {
     }
 
     /* 2. ‘복사’ 버튼을 입력창 세로 높이에 맞춤 */
-    .copy-btn{
-        height:38px;             /* 입력창(약 36-40px)과 맞춤 */
+    .editable-wrap > .copy-btn{
+        height:41px;             /* 입력창(약 36-40px)과 맞춤 */
         padding:0 12px;
         display:flex;
         align-items:center;
         justify-content:center;
         line-height:normal;      /* 텍스트 중앙 정렬 */
         flex-shrink:0;
+    }
+
+    .account-box{
+        margin-bottom:15px;
     }
 }

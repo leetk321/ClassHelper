@@ -66,7 +66,7 @@ async function login() {
                 }, 1000);
             } else {
                 resultDiv.innerHTML =
-                  '<p>로그인 성공! 메인 페이지로 이동합니다…</p>';
+                  '<p>로그인 성공! 메인 페이지로 이동합니다...</p>';
                 setTimeout(() => {
                     window.location.href = '/main';
                 }, 1000);
