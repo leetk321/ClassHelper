@@ -39,11 +39,11 @@ async function login() {
     const resultDiv = document.getElementById("result");
 
     if (!idname || !password) {
-        resultDiv.innerHTML = '<p style="color: red;">아이디와 비밀번호를 모두 입력해주세요.</p>';
+        resultDiv.innerHTML = '<p style="color: red;">학번 이름과 비밀번호를 모두 입력해주세요.</p>';
         return;
     }
 
-    const DEFAULT_PW = "기본비번"; // ← 기본 비밀번호 상수 - 배포시 삭제
+    const DEFAULT_PW = "1234"; // ← 기본 비밀번호 상수 - 배포시 삭제
 
     resultDiv.innerHTML = '<p>로그인 중...</p>';
     try {

@@ -1,3 +1,7 @@
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from collections import defaultdict
+from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -6,6 +10,12 @@ from flask import send_file
 from werkzeug.utils import safe_join
 import os
 from datetime import timedelta
+
+FAILED_LIMIT   = 20                # 연속 5회 실패
+LOCKOUT_TIME   = timedelta(minutes=10)
+
+failed_attempts = defaultdict(list)  # {idname: [datetime, ...]}
+locked_accounts = {}                 # {idname: unlock_datetime}
 
 def is_sequential(pw: str) -> bool:
     pw = pw.lower()
@@ -19,11 +29,16 @@ app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 app.permanent_session_lifetime = timedelta(hours=1)
 
+limiter = Limiter(
+    app=app,  # 명시적으로 app만 지정
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 UPLOAD_FOLDER = 'file'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# 배포시 SPREADSHEET_ID 삭제
-SPREADSHEET_ID = '스프레드시트 아이디입력'
+# 배포시 SPREADSHEET_ID 변경 (테스트 페이지로)
+SPREADSHEET_ID = '1v3JwqVpPT45yYEme_ADcLnlbFuXgaEQnP8CZ26sXVE4'
 RANGE = 'A:X'
 NOTICE_RANGE = '공지사항!A:H'
 
@@ -125,11 +140,25 @@ def change_password_page():
     return render_template('change_pw.html')
 
 @app.route('/lookup', methods=['POST'])
+@limiter.limit("20 per minute")          # IP 당 1분에 최대 20회
 def lookup():
     try:
         data = request.json or {}
         input_id = data.get('idname', '').strip()
         input_pw = data.get('password', '').strip()
+
+        # 1) 입력 유효성 검사
+        if not input_id or not input_pw:
+            return jsonify({'error': '학번 이름과 비밀번호를 입력해주세요'}), 400
+
+        now = datetime.utcnow()
+
+        # 2) 계정 잠금 확인
+        unlock_at = locked_accounts.get(input_id)
+        if unlock_at and now < unlock_at:
+            return jsonify({
+                'error': '로그인 시도가 일시적으로 제한되었습니다. 잠시 후 다시 시도하세요.'
+            }), 429
 
         # ⭐ 안전한 batchGet 처리
         try:
@@ -138,111 +167,136 @@ def lookup():
                 spreadsheetId=SPREADSHEET_ID,
                 ranges=ranges
             ).execute()
-            
+           
             ranges_data = batch_response.get('valueRanges', [])
             print(f"BatchGet 성공: {len(ranges_data)}개 범위 반환")
-            
+           
             # 안전한 데이터 추출
             values = ranges_data[0].get('values', []) if len(ranges_data) > 0 else []
             notices = ranges_data[1].get('values', []) if len(ranges_data) > 1 else []
-            
+           
             score_names = []
             score_titles = []
             score_maxes = []
-            
+           
             if len(ranges_data) > 2:
                 score_names = [r[0] if r else '' for r in ranges_data[2].get('values', [])]
             if len(ranges_data) > 3:
                 score_titles = [r[0] if r else '' for r in ranges_data[3].get('values', [])]
             if len(ranges_data) > 4:
                 score_maxes = [r[0] if r else '' for r in ranges_data[4].get('values', [])]
-                
+               
         except Exception as batch_error:
             print(f"BatchGet 실패, 기존 방식 사용: {batch_error}")
             # fallback to individual calls
             values = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range='A:X').execute().get('values', [])
             notices = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range='공지사항!A:H').execute().get('values', [])
-            
+           
             score_names_resp = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="V2:V5").execute()
             score_titles_resp = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="W2:W5").execute()
             score_maxes_resp = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range="X2:X5").execute()
-            
+           
             score_names = [row[0] if len(row) > 0 else '' for row in score_names_resp.get('values', [])]
             score_titles = [row[0] if len(row) > 0 else '' for row in score_titles_resp.get('values', [])]
             score_maxes = [row[0] if len(row) > 0 else '' for row in score_maxes_resp.get('values', [])]
 
-        # 사용자 검색
+        # 3) 사용자 검색 및 인증
+        user_found = False
+        user_row = None
+        stored_password = ''
+        
         for i, row in enumerate(values):
-            if len(row) >= 7:
-                idname = row[5].strip()
-                password = row[6].strip()
+            if len(row) >= 7 and row[5].strip() == input_id:
+                user_found = True
+                user_row = i
+                stored_password = row[6].strip()
+                break
 
-                if idname == input_id and password == input_pw:
-                    session.permanent = True
-                    session['user'] = {'idname': input_id, 'password': input_pw}
+        # 4) 인증 처리
+        if user_found and stored_password == input_pw:
+            # ✅ 인증 성공 → 실패 기록 초기화
+            failed_attempts.pop(input_id, None)
+            locked_accounts.pop(input_id, None)
 
-                    # 데이터 안전하게 추출
-                    h_to_l = [row[j] if j < len(row) else '' for j in range(7, 12)]
-                    grade = row[0] if len(row) > 0 else ''
-                    clazz = row[1] if len(row) > 1 else ''
-                    teacher = row[13] if len(row) > 13 else ''
-                    personal_msg = row[12] if len(row) > 12 else ''
-                    row_blocked = row[18] if len(row) > 18 else ''
+            # 세션 발급 및 데이터 처리
+            session.permanent = True
+            session['user'] = {'idname': input_id, 'password': input_pw}
 
-                    # 공지사항 처리
-                    teacher_notice = ""
-                    for nrow in notices:
-                        if len(nrow) >= 2 and nrow[0].strip() == teacher:
-                            teacher_notice = nrow[1]
-                            break
+            row = values[user_row]
+            
+            # 데이터 안전하게 추출
+            h_to_l = [row[j] if j < len(row) else '' for j in range(7, 12)]
+            grade = row[0] if len(row) > 0 else ''
+            clazz = row[1] if len(row) > 1 else ''
+            teacher = row[13] if len(row) > 13 else ''
+            personal_msg = row[12] if len(row) > 12 else ''
+            row_blocked = row[18] if len(row) > 18 else ''
 
-                    class_notice = ""
-                    invite_code = ""
-                    entry_invite_code = ""
-                    entry_invite_datetime = ""
+            # 공지사항 처리
+            teacher_notice = ""
+            for nrow in notices:
+                if len(nrow) >= 2 and nrow[0].strip() == teacher:
+                    teacher_notice = nrow[1]
+                    break
 
-                    # 수정 코드
-                    for nrow in notices:
-                        # C열(학년)·D열(반)만 있으면 매칭 가능
-                        if len(nrow) > 3 and nrow[2].strip() == grade and nrow[3].strip() == clazz:
-                            class_notice           = nrow[4] if len(nrow) > 4 else ""   # E열
-                            invite_code            = nrow[5] if len(nrow) > 5 else ""   # F열
-                            entry_invite_code      = nrow[6] if len(nrow) > 6 else ""   # G열
-                            entry_invite_datetime  = nrow[7] if len(nrow) > 7 else ""   # H열
-                            break
+            class_notice = ""
+            invite_code = ""
+            entry_invite_code = ""
+            entry_invite_datetime = ""
 
-                    # 수행평가 점수 처리
-                    score_data = []
-                    student_scores = row[14:18] if len(row) >= 18 else []
+            for nrow in notices:
+                if len(nrow) > 3 and nrow[2].strip() == grade and nrow[3].strip() == clazz:
+                    class_notice = nrow[4] if len(nrow) > 4 else ""
+                    invite_code = nrow[5] if len(nrow) > 5 else ""
+                    entry_invite_code = nrow[6] if len(nrow) > 6 else ""
+                    entry_invite_datetime = nrow[7] if len(nrow) > 7 else ""
+                    break
 
-                    if any(str(s).strip() for s in student_scores if s is not None):
-                        for idx in range(4):
-                            name = score_names[idx] if idx < len(score_names) else f"수행{idx+1}"
-                            max_score = score_maxes[idx] if idx < len(score_maxes) else ''
-                            score = student_scores[idx] if idx < len(student_scores) else ''
+            # 수행평가 점수 처리
+            score_data = []
+            student_scores = row[14:18] if len(row) >= 18 else []
 
-                            if str(score).strip():
-                                score_data.append({
-                                    'name': name,
-                                    'title': score_titles[idx] if idx < len(score_titles) else '',
-                                    'score': str(score),
-                                    'max': str(max_score)
-                                })
+            if any(str(s).strip() for s in student_scores if s is not None):
+                for idx in range(4):
+                    name = score_names[idx] if idx < len(score_names) else f"수행{idx+1}"
+                    max_score = score_maxes[idx] if idx < len(score_maxes) else ''
+                    score = student_scores[idx] if idx < len(student_scores) else ''
 
-                    return jsonify({
-                        'success': True,
-                        'row': i + 1,
-                        'username': input_id,  # ⭐ idname 전달
-                        'data': h_to_l + [teacher, teacher_notice, class_notice, personal_msg, grade, clazz, invite_code, row_blocked, entry_invite_code, entry_invite_datetime],
-                        'score_data': score_data
-                    })
+                    if str(score).strip():
+                        score_data.append({
+                            'name': name,
+                            'title': score_titles[idx] if idx < len(score_titles) else '',
+                            'score': str(score),
+                            'max': str(max_score)
+                        })
 
-        return jsonify({'error': '일치하는 정보 없음'}), 404
+            return jsonify({
+                'success': True,
+                'row': user_row + 1,
+                'username': input_id,
+                'data': h_to_l + [teacher, teacher_notice, class_notice, personal_msg, grade, clazz, invite_code, row_blocked, entry_invite_code, entry_invite_datetime],
+                'score_data': score_data
+            })
+
+        # ✅ 인증 실패 → 실패 횟수 기록
+        if user_found:  # 아이디는 존재하지만 비밀번호 틀림
+            attempts = failed_attempts[input_id]
+            # 최근 LOCKOUT_TIME 내 시도만 유지
+            attempts[:] = [t for t in attempts if now - t < LOCKOUT_TIME]
+            attempts.append(now)
+
+            if len(attempts) >= FAILED_LIMIT:
+                # 계정 잠금
+                locked_accounts[input_id] = now + LOCKOUT_TIME
+                failed_attempts.pop(input_id, None)
+                print(f"계정 잠금: {input_id} - {len(attempts)}회 실패")
+
+        # ✅ 에러 메시지 통일 (아이디 열거 방지)
+        return jsonify({'error': '학번 이름 또는 비밀번호가 올바르지 않습니다.'}), 401
 
     except Exception as e:
-        import traceback
-        print("🔥 lookup 예외 발생:", traceback.format_exc())
-        return jsonify({'error': '서버 내부 오류 발생', 'detail': str(e)}), 500
+        print(f"🔥 lookup 예외 발생: {str(e)}")  # 상세 정보 제거
+        return jsonify({'error': '서버 오류가 발생했습니다.'}), 500
 
 @app.route('/session_check', methods=['GET'])
 def session_check():
@@ -284,68 +338,144 @@ def logout():
 
 @app.route('/update', methods=['POST'])
 def update():
+    if 'user' not in session:
+        return jsonify({'error': '인증되지 않음'}), 401
+    
     data = request.json
-    row_number = int(data['row'])
     new_memo = data['memo']
-
-    range_name = f"L{row_number}"
+    
+    # ✅ 세션에서 사용자 정보 가져오기
+    user_info = session['user']
+    idname = user_info['idname']
+    password = user_info['password']
+    
+    # ✅ 현재 사용자의 실제 row 찾기
+    values = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range='A:X').execute().get('values', [])
+    user_row = None
+    
+    for i, row in enumerate(values):
+        if len(row) >= 7 and row[5].strip() == idname and row[6].strip() == password:
+            user_row = i + 1
+            break
+    
+    if not user_row:
+        return jsonify({'error': '사용자 정보를 찾을 수 없음'}), 404
+    
+    # ✅ 자신의 row에만 업데이트
+    range_name = f"L{user_row}"
     body = {'values': [[new_memo]]}
-
     sheet.values().update(
         spreadsheetId=SPREADSHEET_ID,
         range=range_name,
         valueInputOption="RAW",
         body=body
     ).execute()
-
+    
     return jsonify({'status': 'updated'})
 
 @app.route('/update_account', methods=['POST'])
 def update_account():
+    # 1) 로그인 여부 확인
+    if 'user' not in session:
+        return jsonify({'error': '인증되지 않음'}), 401
+
+    data   = request.json or {}
+    field  = data.get('field')          # 'entry' 또는 'google'
+    value  = data.get('value')
+
+    # 2) 입력값 검증
+    if field not in ('entry', 'google'):
+        return jsonify({'error': 'field 값이 잘못되었습니다.'}), 400
+    if not isinstance(value, list):
+        return jsonify({'error': 'value는 배열이어야 합니다.'}), 400
+
     try:
-        data = request.json
-        row_number = int(data['row'])
-        field = data['field']
-        value = data['value']
+        # 3) 세션의 id/pw 로 현재 사용자 행 찾기
+        user      = session['user']
+        idname    = user['idname']
+        password  = user['password']
 
-        if field == 'entry':
-            range_name = f"H{row_number}:I{row_number}"
-        elif field == 'google':
-            range_name = f"K{row_number}"
-        else:
-            return jsonify({'error': 'invalid field'}), 400
+        rows = sheet.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range='A:X'
+        ).execute().get('values', [])
 
-        if not isinstance(value, list):
-            return jsonify({'error': 'value must be a list'}), 400
+        user_row = None
+        for i, row in enumerate(rows):
+            if len(row) >= 7 and row[5].strip() == idname and row[6].strip() == password:
+                user_row = i + 1      # 시트는 1-base
+                break
 
-        values = [value]
-        body = {'values': values}
+        if not user_row:
+            return jsonify({'error': '사용자 정보를 찾을 수 없습니다.'}), 404
+
+        # 4) 필드별 업데이트 범위 정의
+        if field == 'entry':     # 엔트리 초대코드 + 바로가기 URL
+            range_name = f"H{user_row}:I{user_row}"
+        else:                    # Google Classroom 코드(또는 URL)
+            range_name = f"K{user_row}"
 
         sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=range_name,
             valueInputOption="RAW",
-            body=body
+            body={'values': [value]}
         ).execute()
 
         return jsonify({'status': 'updated'})
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"update_account error: {e}")
+        return jsonify({'error': '서버 오류가 발생했습니다.'}), 500
 
 @app.route('/update_password', methods=['POST'])
 def update_password():
+    if 'user' not in session:
+        return jsonify({'error': '인증되지 않음'}), 401
+
     try:
-        data       = request.json
-        row_number = int(data['row'])
-        new_pw     = data['password']
+        data = request.json or {}
+        current_pw = data.get('current_password')
+        new_pw = data.get('new_password')
 
+        if not current_pw:
+            return jsonify({'error': '현재 비밀번호를 입력해주세요'}), 400
+        
+        if not new_pw:
+            return jsonify({'error': '새 비밀번호를 입력해주세요'}), 400
+
+        # 현재 사용자의 실제 row 찾기
+        user_info = session['user']
+        idname = user_info['idname']
+        session_password = user_info['password']
+
+        # 현재 비밀번호 확인
+        if session_password != current_pw:
+            return jsonify({'error': '현재 비밀번호가 올바르지 않습니다'}), 400
+
+        values = sheet.values().get(
+            spreadsheetId=SPREADSHEET_ID, 
+            range='A:X'
+        ).execute().get('values', [])
+
+        user_row = None
+        for i, row in enumerate(values):
+            if len(row) >= 7 and row[5].strip() == idname and row[6].strip() == current_pw:
+                user_row = i + 1
+                break
+
+        if not user_row:
+            return jsonify({'error': '사용자 정보를 찾을 수 없습니다'}), 404
+
+        # 비밀번호 검증
         if len(new_pw) < 4:
-            return jsonify({'error': '비밀번호는 4자리 이상이어야 합니다.'}), 400
+            return jsonify({'error': '비밀번호는 4자리 이상이어야 합니다'}), 400
+        
         if is_sequential(new_pw):
-            return jsonify({'error': '연속된 문자·숫자로만 이루어진 비밀번호는 사용할 수 없습니다.'}), 400
+            return jsonify({'error': '연속된 문자·숫자로만 이루어진 비밀번호는 사용할 수 없습니다'}), 400
 
-        range_name = f"G{row_number}"
+        # 자신의 비밀번호만 변경
+        range_name = f"G{user_row}"
         sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=range_name,
@@ -353,13 +483,13 @@ def update_password():
             body={'values': [[new_pw]]}
         ).execute()
 
-        # 세션 암호도 최신화
-        if 'user' in session:
-            session['user']['password'] = new_pw
-
+        # 세션 업데이트
+        session['user']['password'] = new_pw
         return jsonify({'status': 'password updated'})
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"비밀번호 변경 오류: {e}")
+        return jsonify({'error': '서버 오류가 발생했습니다'}), 500
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -371,6 +501,13 @@ def upload_file():
 
     if not file or file.filename == '':
         return jsonify({'error': '파일이 선택되지 않았습니다'}), 400
+
+    # 테스트용 사이트에만 추가한 업로드 용량 제한 부분. 필요없으면 삭제.
+    file.seek(0, os.SEEK_END)  # 파일 끝으로 이동
+    file_length = file.tell()  # 현재 위치 = 파일 크기
+    file.seek(0)               # 다시 처음으로 이동
+    if file_length > 1024 * 1024:
+        return jsonify({'error': '파일 크기는 1MB 이하만 업로드 가능합니다'}), 400
 
     values = sheet.values().get(
         spreadsheetId=SPREADSHEET_ID,
@@ -429,22 +566,86 @@ def uploaded_file(filename):
 
 @app.route('/delete_file', methods=['POST'])
 def delete_file():
+    if 'user' not in session:
+        return jsonify({'error': '인증되지 않음'}), 401
+    
     data = request.get_json()
     filename = data.get('filename')
-
+    
     if not filename:
         return jsonify({'error': '파일명이 제공되지 않았습니다.'}), 400
-
-    file_path = os.path.join(UPLOAD_FOLDER, filename)
-
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            return jsonify({'success': 'deleted'})
-        except Exception as e:
-            return jsonify({'error': f'삭제 중 오류 발생: {str(e)}'}), 500
-    else:
-        return jsonify({'error': '파일이 존재하지 않습니다.'}), 404
+    
+    try:
+        user_info = session['user']
+        idname = user_info['idname']
+        
+        # 현재 사용자 정보 조회
+        values = sheet.values().get(
+            spreadsheetId=SPREADSHEET_ID, 
+            range='A:X'
+        ).execute().get('values', [])
+        
+        current_teacher = None
+        user_row = None
+        
+        for i, row in enumerate(values):
+            if len(row) >= 7 and row[5].strip() == idname and row[6].strip() == user_info['password']:
+                current_teacher = row[13] if len(row) > 13 else ''
+                user_row = i + 1
+                break
+        
+        if not current_teacher:
+            return jsonify({'error': '사용자 정보를 찾을 수 없습니다.'}), 404
+        
+        # 관리자 권한 확인
+        is_admin = False
+        if user_row:
+            admin_check = sheet.values().get(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f'S{user_row}'
+            ).execute().get('values', [])
+            
+            if admin_check and len(admin_check[0]) > 0 and admin_check[0][0] == '관리자':
+                is_admin = True
+        
+        # 파일명 권한 확인
+        expected_prefix = f"{current_teacher}_"
+        if not filename.startswith(expected_prefix) and not is_admin:
+            return jsonify({'error': '본인이 업로드한 파일만 삭제할 수 있습니다.'}), 403
+        
+        # ✅ 수정된 안전한 경로 검증
+        # 1. 파일명에서 위험한 문자 제거
+        safe_filename = os.path.basename(filename)  # 경로 구분자 제거
+        if safe_filename != filename:
+            return jsonify({'error': '잘못된 파일명입니다.'}), 400
+        
+        # 2. 절대 경로로 통일하여 비교
+        upload_dir = os.path.abspath(UPLOAD_FOLDER)
+        file_path = os.path.abspath(os.path.join(UPLOAD_FOLDER, safe_filename))
+        
+        # 3. Path traversal 공격 방지
+        if not file_path.startswith(upload_dir + os.sep):
+            return jsonify({'error': '잘못된 파일 경로입니다.'}), 400
+        
+        # 4. 추가 보안 검사
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return jsonify({'error': '파일명에 경로 문자가 포함되어 있습니다.'}), 400
+        
+        # 파일 존재 여부 확인 및 삭제
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            try:
+                os.remove(file_path)
+                print(f"File deleted: {filename} by user: {idname} (teacher: {current_teacher})")
+                return jsonify({'success': 'deleted'})
+            except Exception as e:
+                print(f"Delete error: {e}")
+                return jsonify({'error': '파일 삭제 중 오류가 발생했습니다.'}), 500
+        else:
+            return jsonify({'error': '파일이 존재하지 않습니다.'}), 404
+            
+    except Exception as e:
+        print(f"Delete file error: {e}")
+        return jsonify({'error': '서버 오류가 발생했습니다.'}), 500
 
 @app.route('/file_list')
 def file_list():
@@ -471,4 +672,4 @@ def file_list():
         return jsonify([])
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=포트번호)
+    app.run(host='0.0.0.0', port=5000)

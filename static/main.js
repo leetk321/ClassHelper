@@ -78,7 +78,7 @@ function generateMainHTML(data, scoreData, idname, grade, clazz, rowNum, isAdmin
 
   return `
     <div class="top-box">
-      <div class="title-box"><h2 style="cursor:pointer;" onclick="location.reload();">📚 ㅇㅇ중 정보 수업 도우미</h2></div> <!-- 배포시 학교명 삭제 -->
+      <div class="title-box"><h2 style="cursor:pointer;" onclick="location.reload();">📚 ㅇㅇ중 정보 수업 도우미</h2></div>
       <div id="uploadArea"></div>
     </div>
     <div class="result-box">
@@ -99,7 +99,7 @@ function generateMainHTML(data, scoreData, idname, grade, clazz, rowNum, isAdmin
       ${generateAccountsHTML(entryId, entryPw, googleId, googlePw, memo, rowBlocked, rowNum)}
       
       <p style="margin-top:30px; font-size:13px; color:#555; text-align:center">
-        ※ 아이디나 비밀번호를 변경한 경우, 변경 버튼을 눌러 계정 정보를 기록해주세요.<br/>
+        ※ 아이디나 비밀번호를 변경한 경우, 변경 기록 버튼을 눌러 계정 정보를 기록해주세요.<br/>
       </p>
     </div>
   `;
@@ -180,7 +180,7 @@ function generateEntryAccountHTML(entryId, entryPw, rowBlocked, rowNum) {
           <button onclick="copyToClipboard(document.querySelectorAll('.editable')[1].innerText, this)" class="copy-btn">복사</button>
         </div>
       </div>
-      <button class="change-btn red" onclick="saveAccount(${rowNum}, 'entry', [
+      <button class="change-btn red" onclick="saveAccount('entry', [
         document.querySelectorAll('.editable')[0].innerText.trim(),
         document.querySelectorAll('.editable')[1].innerText.trim()
       ])">엔트리 아이디 / 비밀번호 변경 기록하기</button>
@@ -212,7 +212,7 @@ function generateGoogleAccountHTML(googleId, googlePw, rowBlocked, rowNum) {
           <button onclick="copyToClipboard(document.querySelectorAll('.editable')[3].innerText, this)" class="copy-btn">복사</button>
         </div>
       </div>
-      <button class="change-btn red" onclick="saveAccount(${rowNum}, 'google', [
+      <button class="change-btn red" onclick="saveAccount('google', [
         document.querySelectorAll('.editable')[3].innerText.trim()
       ])">Google 비밀번호 변경 기록하기</button>
     </div>
@@ -224,7 +224,7 @@ function generateMemoHTML(memo, rowNum) {
     <div class="account-box memo-box">
       <div class="field-label">📝 메모</div>
       <div id="memoCell" class="editable memo-area" contenteditable="true" data-placeholder="메모를 입력하세요">${memo}</div>
-      <button class="save-btn" onclick="saveMemo(${rowNum})">메모 저장</button>
+      <button class="save-btn" onclick="saveMemo()">메모 저장</button>
     </div>
   `;
 }
@@ -281,7 +281,7 @@ function setupUploadArea(rowNum) {
         <button class="upload-btn" type="button" onclick="uploadFile(${rowNum})">업로드</button>
       </div>
       <div id="fileDropZone" class="drop-zone">
-        <span>이 곳에 파일을 끌어놓거나 클릭하세요</span>
+        <span>이 곳에 파일을 끌어 놓거나<br/>클릭하세요</span>
         <input type="file" id="uploadFileInput" class="file-input" />
       </div>
     </div>
@@ -329,45 +329,65 @@ async function logout() {
   }
 }
 
-async function saveMemo(row) {
-  const newMemo = document.getElementById("memoCell").innerText.trim();
-  try {
-    const res = await fetch("/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ row, memo: newMemo })
-    });
-
-    if (res.ok) {
-      alert("메모가 저장되었습니다!");
-    } else {
-      throw new Error('저장 실패');
+// main.js에서 row 번호를 서버에서 받아 사용하지 말고
+// 서버가 세션으로 자동 판단하도록 수정
+async function saveMemo() {
+    // ✅ 메모 저장 버튼 근처의 editable 요소 찾기
+    const saveButton = event.target; // 클릭된 버튼
+    const memoBox = saveButton.closest('.memo-box') || saveButton.closest('.account-box');
+    const memoElement = memoBox ? memoBox.querySelector('.editable') : null;
+    
+    if (!memoElement) {
+        alert('메모 입력창을 찾을 수 없습니다.');
+        return;
     }
-  } catch (e) {
-    console.error(e);
-    alert("저장 실패");
-  }
+    
+    const memoText = (memoElement.textContent || memoElement.innerText || '').trim();
+    
+    if (!confirm("메모를 저장하시겠습니까?")) return;
+
+    try {
+        const res = await fetch("/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ memo: memoText })
+        });
+
+        const result = await res.json();
+        
+        if (res.ok) {
+            alert("메모가 저장되었습니다!");
+        } else {
+            throw new Error(result.error || '저장 실패');
+        }
+    } catch (e) {
+        console.error('메모 저장 오류:', e);
+        alert(e.message || "메모 저장 실패");
+    }
 }
 
-async function saveAccount(row, field, newValue) {
-  if (!confirm("변경한 계정 정보를 기록하시겠습니까?")) return;
+// main.js ­— row 인자 삭제
 
-  try {
-    const res = await fetch("/update_account", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ row, field, value: newValue })
-    });
+async function saveAccount(field, newValue) {
+    if (!confirm("변경한 계정 정보를 기록하시겠습니까?")) return;
 
-    if (res.ok) {
-      alert("계정 정보가 저장되었습니다!");
-    } else {
-      throw new Error('저장 실패');
+    try {
+        const res = await fetch("/update_account", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ field, value: newValue })
+        });
+
+        if (res.ok) {
+            alert("계정 정보가 저장되었습니다!");
+        } else {
+            const errorData = await res.json();
+            throw new Error(errorData.error || '저장 실패');
+        }
+    } catch (e) {
+        console.error(e);
+        alert(e.message || "저장 실패");
     }
-  } catch (e) {
-    console.error(e);
-    alert("저장 실패");
-  }
 }
 
 // ---------- 클립보드 복사 ----------
@@ -454,6 +474,12 @@ async function uploadFile(row) {
     return;
   }
 
+  //테스트용 사이트에만 추가한 업로드 용량 제한 부분. 필요없으면 삭제.
+  if (file.size > 1024 * 1024) {
+    alert('파일 크기는 1MB 이하만 업로드할 수 있습니다.');
+    return;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('row', row);
@@ -478,6 +504,7 @@ async function uploadFile(row) {
   }
 }
 
+// ---------- resetUploadForm 함수도 수정 ----------
 function resetUploadForm() {
   const fileInput = document.getElementById('uploadFileInput');
   const dropZone = document.getElementById('fileDropZone');
@@ -487,11 +514,38 @@ function resetUploadForm() {
   if (dropZone) {
     const span = dropZone.querySelector('span');
     if (span) {
-      span.textContent = "이 곳에 파일을 끌어놓거나 클릭하세요";
+      span.innerHTML = "이 곳에 파일을 끌어 놓거나<br>클릭하세요";
     }
   }
 }
 
+// ---------- 파일명 줄임 함수 추가 ----------
+function truncateFileName(fileName, maxLength = 30) {
+  if (fileName.length <= maxLength) {
+    return fileName;
+  }
+  
+  // 확장자 분리
+  const lastDotIndex = fileName.lastIndexOf('.');
+  if (lastDotIndex === -1) {
+    // 확장자 없는 경우
+    return fileName.substring(0, maxLength - 3) + '...';
+  }
+  
+  const name = fileName.substring(0, lastDotIndex);
+  const extension = fileName.substring(lastDotIndex);
+  
+  // 확장자를 보존하면서 파일명 줄이기
+  const availableLength = maxLength - extension.length - 3; // 3은 ... 길이
+  
+  if (availableLength > 0) {
+    return name.substring(0, availableLength) + '...' + extension;
+  } else {
+    return fileName.substring(0, maxLength - 3) + '...';
+  }
+}
+
+// ---------- 기존 setupDropZone 함수 수정 ----------
 function setupDropZone(rowNum) {
   const dropZone = document.getElementById("fileDropZone");
   const fileInput = document.getElementById("uploadFileInput");
@@ -505,16 +559,21 @@ function setupDropZone(rowNum) {
     }
   });
 
+// ✅ 파일 정보 표시 함수 개선
   function updateFileInfoDisplay(file) {
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-    span.textContent = `${file.name} (${sizeMB}MB)`;
+    const fileSize = file.size > 1024 * 1024 
+      ? (file.size / (1024 * 1024)).toFixed(1) + 'MB'
+      : (file.size / 1024).toFixed(1) + 'KB';
+    
+    const displayName = truncateFileName(file.name, 25);
+    span.innerHTML = `${displayName}<br>(${fileSize})`;
   }
 
   fileInput.addEventListener("change", () => {
     if (fileInput.files.length > 0) {
       updateFileInfoDisplay(fileInput.files[0]);
     } else {
-      span.textContent = "이 곳에 파일을 끌어놓거나 클릭하세요";
+      span.innerHTML = "이 곳에 파일을 끌어 놓거나<br>클릭하세요";
     }
   });
 
@@ -541,6 +600,36 @@ function setupDropZone(rowNum) {
     }
   });
 }
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files.length > 0) {
+      updateFileInfoDisplay(fileInput.files[0]);
+    } else {
+      span.innerHTML = "이 곳에 파일을 끌어 놓거나<br>클릭하세요";
+    }
+  });
+
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+
+  dropZone.addEventListener("dragleave", () => {
+    dropZone.classList.remove("dragover");
+  });
+
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const dt = new DataTransfer();
+      dt.items.add(files[0]);
+      fileInput.files = dt.files;
+
+      updateFileInfoDisplay(files[0]);
+    }
+  });
 
 function bindDeleteButtons() {
   document.querySelectorAll('.delete-btn').forEach(btn => {
